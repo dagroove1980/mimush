@@ -15,11 +15,14 @@ async function fetchApi<T>(
   _method: "GET" | "POST" = "POST",
   body?: Record<string, unknown>
 ): Promise<T> {
-  const SHEETS_URL = getSheetsUrl();
+  let SHEETS_URL = getSheetsUrl();
   if (!SHEETS_URL) {
     console.error("[Sheets API] NEXT_PUBLIC_SHEETS_APP_URL is not set");
     throw new Error("NEXT_PUBLIC_SHEETS_APP_URL is not set. Please check your environment variables in Vercel.");
   }
+  
+  // Ensure URL ends with /exec (fix any typos like execN)
+  SHEETS_URL = SHEETS_URL.replace(/\/execN?$/i, '/exec');
   
   // Call Google Apps Script directly from client-side (browser)
   // This works because browser requests aren't blocked like server-side requests

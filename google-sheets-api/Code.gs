@@ -112,6 +112,18 @@ function doPost(e) {
   return handleRequest(e, params);
 }
 
+function doOptions(e) {
+  // Handle CORS preflight requests
+  return ContentService.createTextOutput('')
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeaders({
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age': '3600',
+    });
+}
+
 function handleRequest(e, params) {
   const action = params.action;
   let result = { error: 'Unknown action' };
@@ -166,8 +178,14 @@ function handleRequest(e, params) {
   } catch (err) {
     result = { error: err.toString() };
   }
+  // Add CORS headers to allow cross-origin requests from the Next.js app
   return ContentService.createTextOutput(JSON.stringify(result))
-    .setMimeType(ContentService.MimeType.JSON);
+    .setMimeType(ContentService.MimeType.JSON)
+    .setHeaders({
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
 }
 
 // --- Users & Auth ---
