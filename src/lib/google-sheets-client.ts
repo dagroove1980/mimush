@@ -7,21 +7,37 @@ import { google } from 'googleapis';
 
 const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || '';
 const SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '';
-const PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
+// Handle private key - it might come with literal \n or actual newlines
+let PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY || '';
+if (PRIVATE_KEY) {
+  // Replace literal \n with actual newlines
+  PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, '\n');
+  // Remove quotes if present
+  PRIVATE_KEY = PRIVATE_KEY.replace(/^["']|["']$/g, '');
+}
 
 let authClient: any = null;
 
 function getAuthClient() {
   if (!authClient) {
     if (!SERVICE_ACCOUNT_EMAIL || !PRIVATE_KEY) {
-      throw new Error('Google Sheets API credentials not configured');
+      throw new Error(`Google Sheets API credentials not configured. Email: ${!!SERVICE_ACCOUNT_EMAIL}, Key: ${!!PRIVATE_KEY}`);
     }
     
-    authClient = new google.auth.JWT({
-      email: SERVICE_ACCOUNT_EMAIL,
-      key: PRIVATE_KEY,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-    });
+    // Validate private key format
+    if (!PRIVATE_KEY.includes('BEGIN PRIVATE KEY')) {
+      throw new Error('Invalid private key format - missing BEGIN PRIVATE KEY');
+    }
+    
+    try {
+      authClient = new google.auth.JWT({
+        email: SERVICE_ACCOUNT_EMAIL,
+        key: PRIVATE_KEY,
+        scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+      });
+    } catch (err) {
+      throw new Error(`Failed to create JWT auth client: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    }
   }
   return authClient;
 }
