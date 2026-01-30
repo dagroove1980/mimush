@@ -247,39 +247,66 @@ async function handleLogin(username: string, password: string) {
     return { success: false, error: 'Missing credentials' };
   }
   
-  const data = await readSheet(SHEET_NAMES.USERS);
-  if (data.length < 2) {
-    await ensureAdminUser();
-    return await handleLogin(username, password);
-  }
-  
-  const headers = data[0];
-  const idIdx = headers.indexOf('id');
-  const userIdx = headers.indexOf('username');
-  const passIdx = headers.indexOf('password');
-  const roleIdx = headers.indexOf('role');
-  const displayIdx = headers.indexOf('displayName');
-  const statusIdx = headers.indexOf('status');
-
-  for (let i = 1; i < data.length; i++) {
-    const row = data[i];
-    if (
-      String(row[userIdx]).toLowerCase() === String(username).toLowerCase() &&
-      String(row[passIdx]) === String(password)
-    ) {
-      return {
-        success: true,
-        user: {
-          id: String(row[idIdx]),
-          username: String(row[userIdx]),
-          displayName: String(displayIdx >= 0 ? row[displayIdx] : row[userIdx]),
-          role: String(row[roleIdx] || 'student'),
-          status: statusIdx >= 0 ? String(row[statusIdx]) : 'active',
-        },
-      };
+  try {
+    const data = await readSheet(SHEET_NAMES.USERS);
+    if (data.length < 2) {
+      await ensureAdminUser();
+      return await handleLogin(username, password);
     }
+    
+    const headers = data[0];
+    if (!headers || headers.length === 0) {
+      await ensureAdminUser();
+      return await handleLogin(username, password);
+    }
+    
+    const idIdx = headers.indexOf('id');
+    const userIdx = headers.indexOf('username');
+    const passIdx = headers.indexOf('password');
+    const roleIdx = headers.indexOf('role');
+    const displayIdx = headers.indexOf('displayName');
+    const statusIdx = headers.indexOf('status');
+
+    // Validate indices
+    if (idIdx < 0 || userIdx < 0 || passIdx < 0) {
+      console.error("[API] Missing required columns in Users sheet:", { idIdx, userIdx, passIdx });
+      return { success: false, error: 'Users sheet format error - missing required columns' };
+    }
+
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (!row || row.length === 0) continue;
+      
+      // Handle missing values
+      const rowUsername = row[userIdx] ? String(row[userIdx]).toLowerCase() : '';
+      const rowPassword = row[passIdx] ? String(row[passIdx]) : '';
+      const inputUsername = String(username).toLowerCase();
+      const inputPassword = String(password);
+      
+      if (rowUsername === inputUsername && rowPassword === inputPassword) {
+        // Check if user is active
+        const userStatus = statusIdx >= 0 && row[statusIdx] ? String(row[statusIdx]) : 'active';
+        if (userStatus !== 'active') {
+          return { success: false, error: 'Account is inactive' };
+        }
+        
+        return {
+          success: true,
+          user: {
+            id: String(row[idIdx] || ''),
+            username: String(row[userIdx] || ''),
+            displayName: String(displayIdx >= 0 && row[displayIdx] ? row[displayIdx] : row[userIdx] || ''),
+            role: String(row[roleIdx] || 'student'),
+            status: userStatus,
+          },
+        };
+      }
+    }
+    return { success: false, error: 'Invalid credentials' };
+  } catch (err) {
+    console.error("[API] Login error:", err);
+    throw err;
   }
-  return { success: false, error: 'Invalid credentials' };
 }
 
 // Get students handler
