@@ -13,19 +13,32 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "NEXT_PUBLIC_SHEETS_APP_URL is not set", ...info });
   }
 
-  // Test the connection
+  // Test the connection - use POST like the actual API does
   try {
     const testUrl = `${SHEETS_URL}?action=test`;
     const res = await fetch(testUrl, {
-      method: "GET",
+      method: "POST",
+      headers: { 
+        "Content-Type": "application/json",
+        "User-Agent": "MerkazMiyum/1.0"
+      },
+      body: JSON.stringify({ action: "test" }),
       redirect: "follow",
     });
     const text = await res.text();
+    
+    // Check if we got HTML (sign-in page) instead of JSON
+    const isHtml = text.trim().toLowerCase().startsWith("<!doctype") || 
+                   text.includes("<html") || 
+                   text.includes("accounts.google.com");
+    
     return NextResponse.json({
-      success: true,
+      success: !isHtml,
       status: res.status,
       statusText: res.statusText,
+      isHtml: isHtml,
       responsePreview: text.substring(0, 500),
+      responseType: isHtml ? "HTML (sign-in page)" : "JSON",
       ...info,
     });
   } catch (err) {
