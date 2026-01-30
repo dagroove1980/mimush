@@ -407,43 +407,64 @@ async function handleGetSkills() {
 
 // Get student skills handler
 async function handleGetStudentSkills(studentId: string) {
-  const skillsData = await readSheet(SHEET_NAMES.SKILLS);
-  const levelsData = await readSheet(SHEET_NAMES.STUDENT_SKILL_LEVELS);
-  
-  const skills = [];
-  const headers = skillsData[0];
-  const idIdx = headers.indexOf('id');
-  const nameIdx = headers.indexOf('nameHe');
-  
-  const levelMap: Record<string, { level: number; progressPercent: number }> = {};
-  if (levelsData.length >= 2) {
-    const levelHeaders = levelsData[0];
-    const sIdIdx = levelHeaders.indexOf('studentId');
-    const skIdx = levelHeaders.indexOf('skillId');
-    const lvlIdx = levelHeaders.indexOf('level');
-    const pctIdx = levelHeaders.indexOf('progressPercent');
+  try {
+    await ensureDemoSkills(); // Make sure skills exist
+    const skillsData = await readSheet(SHEET_NAMES.SKILLS);
+    if (skillsData.length < 2) {
+      return { skills: [] };
+    }
     
-    for (let i = 1; i < levelsData.length; i++) {
-      if (String(levelsData[i][sIdIdx]) === String(studentId)) {
-        levelMap[String(levelsData[i][skIdx])] = {
-          level: Number(levelsData[i][lvlIdx]) || 1,
-          progressPercent: pctIdx >= 0 ? Number(levelsData[i][pctIdx]) : 50,
-        };
+    const levelsData = await readSheet(SHEET_NAMES.STUDENT_SKILL_LEVELS);
+    
+    const skills = [];
+    const headers = skillsData[0] || [];
+    const idIdx = headers.indexOf('id');
+    const nameIdx = headers.indexOf('nameHe');
+    
+    if (idIdx < 0 || nameIdx < 0) {
+      console.error("[API] Missing columns in Skills sheet");
+      return { skills: [] };
+    }
+    
+    const levelMap: Record<string, { level: number; progressPercent: number }> = {};
+    if (levelsData.length >= 2 && levelsData[0]) {
+      const levelHeaders = levelsData[0];
+      const sIdIdx = levelHeaders.indexOf('studentId');
+      const skIdx = levelHeaders.indexOf('skillId');
+      const lvlIdx = levelHeaders.indexOf('level');
+      const pctIdx = levelHeaders.indexOf('progressPercent');
+      
+      if (sIdIdx >= 0 && skIdx >= 0) {
+        for (let i = 1; i < levelsData.length; i++) {
+          const row = levelsData[i];
+          if (row && String(row[sIdIdx]) === String(studentId)) {
+            levelMap[String(row[skIdx])] = {
+              level: lvlIdx >= 0 ? (Number(row[lvlIdx]) || 1) : 1,
+              progressPercent: pctIdx >= 0 ? (Number(row[pctIdx]) || 50) : 50,
+            };
+          }
+        }
       }
     }
+    
+    for (let i = 1; i < skillsData.length; i++) {
+      const row = skillsData[i];
+      if (!row || row.length === 0) continue;
+      
+      const sid = String(row[idIdx] || '');
+      const lev = levelMap[sid] || { level: 1, progressPercent: 0 };
+      skills.push({
+        id: sid,
+        nameHe: String(row[nameIdx] || ''),
+        level: lev.level,
+        progressPercent: lev.progressPercent,
+      });
+    }
+    return { skills };
+  } catch (err) {
+    console.error("[API] Error in handleGetStudentSkills:", err);
+    throw err;
   }
-  
-  for (let i = 1; i < skillsData.length; i++) {
-    const sid = String(skillsData[i][idIdx]);
-    const lev = levelMap[sid] || { level: 1, progressPercent: 0 };
-    skills.push({
-      id: sid,
-      nameHe: String(skillsData[i][nameIdx]),
-      level: lev.level,
-      progressPercent: lev.progressPercent,
-    });
-  }
-  return { skills };
 }
 
 // Get skill metrics handler
@@ -488,52 +509,64 @@ async function handleSaveSelfAssessment(studentId: string, skillId: string, metr
 
 // Get personal plan tasks handler
 async function handleGetPersonalPlanTasks(studentId: string, date: string) {
-  const tasksData = await readSheet(SHEET_NAMES.STUDENT_DAILY_TASKS);
-  const templates = await handleGetPersonalPlanTemplates();
-  
-  const nameMap: Record<string, string> = {};
-  templates.tasks.forEach((t: any) => {
-    nameMap[t.id] = t.nameHe;
-  });
-  
-  const headers = tasksData[0] || [];
-  const sIdx = headers.indexOf('studentId');
-  const tIdx = headers.indexOf('taskId');
-  const dIdx = headers.indexOf('date');
-  const cIdx = headers.indexOf('completed');
-  const timeIdx = headers.indexOf('timeLabel');
-  const priIdx = headers.indexOf('priority');
-  
-  const tasks = [];
-  for (let i = 1; i < tasksData.length; i++) {
-    const row = tasksData[i];
-    if (String(row[sIdx]) === String(studentId) && String(row[dIdx]) === String(date)) {
-      tasks.push({
-        id: String(row[tIdx]),
-        nameHe: nameMap[row[tIdx]] || String(row[tIdx]),
-        completed: String(row[cIdx]).toLowerCase() === 'true' || row[cIdx] === true,
-        timeLabel: timeIdx >= 0 ? String(row[timeIdx]) : undefined,
-        priority: priIdx >= 0 ? String(row[priIdx]) : undefined,
-      });
+  try {
+    const tasksData = await readSheet(SHEET_NAMES.STUDENT_DAILY_TASKS);
+    const templates = await handleGetPersonalPlanTemplates();
+    
+    const nameMap: Record<string, string> = {};
+    templates.tasks.forEach((t: any) => {
+      nameMap[t.id] = t.nameHe;
+    });
+    
+    const headers = tasksData[0] || [];
+    const sIdx = headers.indexOf('studentId');
+    const tIdx = headers.indexOf('taskId');
+    const dIdx = headers.indexOf('date');
+    const cIdx = headers.indexOf('completed');
+    const timeIdx = headers.indexOf('timeLabel');
+    const priIdx = headers.indexOf('priority');
+    
+    if (sIdx < 0 || tIdx < 0 || dIdx < 0) {
+      console.error("[API] Missing required columns in StudentDailyTasks sheet");
+      return { tasks: [] };
     }
-  }
-  
-  // If no tasks, create default ones
-  if (tasks.length === 0 && templates.tasks.length > 0) {
-    for (const template of templates.tasks) {
-      await appendRow(SHEET_NAMES.STUDENT_DAILY_TASKS, [
-        studentId,
-        template.id,
-        date,
-        false,
-        '',
-        'normal',
-      ]);
+    
+    const tasks = [];
+    for (let i = 1; i < tasksData.length; i++) {
+      const row = tasksData[i];
+      if (!row || row.length === 0) continue;
+      
+      if (String(row[sIdx]) === String(studentId) && String(row[dIdx]) === String(date)) {
+        tasks.push({
+          id: String(row[tIdx] || ''),
+          nameHe: nameMap[row[tIdx]] || String(row[tIdx] || ''),
+          completed: cIdx >= 0 ? (String(row[cIdx]).toLowerCase() === 'true' || row[cIdx] === true) : false,
+          timeLabel: timeIdx >= 0 && row[timeIdx] ? String(row[timeIdx]) : undefined,
+          priority: priIdx >= 0 && row[priIdx] ? String(row[priIdx]) : undefined,
+        });
+      }
     }
-    return await handleGetPersonalPlanTasks(studentId, date);
+    
+    // If no tasks, create default ones
+    if (tasks.length === 0 && templates.tasks.length > 0) {
+      for (const template of templates.tasks) {
+        await appendRow(SHEET_NAMES.STUDENT_DAILY_TASKS, [
+          studentId,
+          template.id,
+          date,
+          false,
+          '',
+          'normal',
+        ]);
+      }
+      return await handleGetPersonalPlanTasks(studentId, date);
+    }
+    
+    return { tasks };
+  } catch (err) {
+    console.error("[API] Error in handleGetPersonalPlanTasks:", err);
+    throw err;
   }
-  
-  return { tasks };
 }
 
 // Set task completed handler
@@ -564,50 +597,70 @@ async function handleSetTaskCompleted(studentId: string, taskId: string, date: s
 
 // Get activities for date handler
 async function handleGetActivitiesForDate(studentId: string, date: string) {
-  const activitiesData = await readSheet(SHEET_NAMES.ACTIVITIES);
-  const completionsData = await readSheet(SHEET_NAMES.ACTIVITY_COMPLETIONS);
-  
-  const dateStr = String(date).slice(0, 10);
-  const headers = activitiesData[0] || [];
-  const idIdx = headers.indexOf('id');
-  const dateIdx = headers.indexOf('date');
-  const titleIdx = headers.indexOf('titleHe');
-  const descIdx = headers.indexOf('descriptionHe');
-  const startIdx = headers.indexOf('timeStart');
-  const endIdx = headers.indexOf('timeEnd');
-  
-  const compMap: Record<string, boolean> = {};
-  if (completionsData.length >= 2) {
-    const compHeaders = completionsData[0];
-    const aIdx = compHeaders.indexOf('activityId');
-    const sIdx = compHeaders.indexOf('studentId');
-    const cIdx = compHeaders.indexOf('completed');
+  try {
+    const activitiesData = await readSheet(SHEET_NAMES.ACTIVITIES);
+    const completionsData = await readSheet(SHEET_NAMES.ACTIVITY_COMPLETIONS);
     
-    for (let i = 1; i < completionsData.length; i++) {
-      if (String(completionsData[i][sIdx]) === String(studentId)) {
-        compMap[String(completionsData[i][aIdx])] = 
-          completionsData[i][cIdx] === true || String(completionsData[i][cIdx]).toLowerCase() === 'true';
+    if (activitiesData.length < 2) {
+      return { activities: [] };
+    }
+    
+    const dateStr = String(date).slice(0, 10);
+    const headers = activitiesData[0] || [];
+    const idIdx = headers.indexOf('id');
+    const dateIdx = headers.indexOf('date');
+    const titleIdx = headers.indexOf('titleHe');
+    const descIdx = headers.indexOf('descriptionHe');
+    const startIdx = headers.indexOf('timeStart');
+    const endIdx = headers.indexOf('timeEnd');
+    
+    if (idIdx < 0 || dateIdx < 0 || titleIdx < 0) {
+      console.error("[API] Missing required columns in Activities sheet");
+      return { activities: [] };
+    }
+    
+    const compMap: Record<string, boolean> = {};
+    if (completionsData.length >= 2 && completionsData[0]) {
+      const compHeaders = completionsData[0];
+      const aIdx = compHeaders.indexOf('activityId');
+      const sIdx = compHeaders.indexOf('studentId');
+      const cIdx = compHeaders.indexOf('completed');
+      
+      if (aIdx >= 0 && sIdx >= 0 && cIdx >= 0) {
+        for (let i = 1; i < completionsData.length; i++) {
+          const row = completionsData[i];
+          if (row && String(row[sIdx]) === String(studentId)) {
+            compMap[String(row[aIdx])] = 
+              row[cIdx] === true || String(row[cIdx]).toLowerCase() === 'true';
+          }
+        }
       }
     }
-  }
-  
-  const activities = [];
-  for (let i = 1; i < activitiesData.length; i++) {
-    const rowDate = toDateKey(activitiesData[i][dateIdx]);
-    if (rowDate === dateStr) {
-      const aid = String(activitiesData[i][idIdx]);
-      activities.push({
-        id: aid,
-        date: rowDate,
-        titleHe: String(activitiesData[i][titleIdx]),
-        descriptionHe: descIdx >= 0 ? String(activitiesData[i][descIdx]) : '',
-        timeStart: startIdx >= 0 ? String(activitiesData[i][startIdx]) : '',
-        timeEnd: endIdx >= 0 ? String(activitiesData[i][endIdx]) : '',
-        completed: compMap[aid] || false,
-      });
+    
+    const activities = [];
+    for (let i = 1; i < activitiesData.length; i++) {
+      const row = activitiesData[i];
+      if (!row || row.length === 0) continue;
+      
+      const rowDate = toDateKey(row[dateIdx]);
+      if (rowDate === dateStr) {
+        const aid = String(row[idIdx] || '');
+        activities.push({
+          id: aid,
+          date: rowDate,
+          titleHe: String(row[titleIdx] || ''),
+          descriptionHe: descIdx >= 0 && row[descIdx] ? String(row[descIdx]) : '',
+          timeStart: startIdx >= 0 && row[startIdx] ? String(row[startIdx]) : '',
+          timeEnd: endIdx >= 0 && row[endIdx] ? String(row[endIdx]) : '',
+          completed: compMap[aid] || false,
+        });
+      }
     }
+    return { activities };
+  } catch (err) {
+    console.error("[API] Error in handleGetActivitiesForDate:", err);
+    throw err;
   }
-  return { activities };
 }
 
 // Get activities for date range handler
