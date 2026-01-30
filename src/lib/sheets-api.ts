@@ -4,15 +4,20 @@
  * Set NEXT_PUBLIC_SHEETS_APP_URL in .env.local and Vercel.
  */
 
-const SHEETS_URL = process.env.NEXT_PUBLIC_SHEETS_APP_URL || "";
+// Get URL - NEXT_PUBLIC_ vars are available in browser in Next.js
+function getSheetsUrl(): string {
+  // In Next.js, NEXT_PUBLIC_ variables are injected at build time and available in browser
+  return process.env.NEXT_PUBLIC_SHEETS_APP_URL || "";
+}
 
 async function fetchApi<T>(
   action: string,
   _method: "GET" | "POST" = "POST",
   body?: Record<string, unknown>
 ): Promise<T> {
+  const SHEETS_URL = getSheetsUrl();
   if (!SHEETS_URL) {
-    throw new Error("NEXT_PUBLIC_SHEETS_APP_URL is not set");
+    throw new Error("NEXT_PUBLIC_SHEETS_APP_URL is not set. Please check your environment variables.");
   }
   
   // Call Google Apps Script directly from client-side (browser)
