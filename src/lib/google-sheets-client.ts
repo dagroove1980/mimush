@@ -64,22 +64,70 @@ export interface SheetData {
   [key: string]: any;
 }
 
+// Cache to track which sheets we've checked (reduces API calls)
+const sheetExistenceCache = new Set<string>();
+
+// In-memory cache for readSheet calls (TTL: 30 seconds)
+interface CacheEntry {
+  data: any[][];
+  timestamp: number;
+}
+const readCache = new Map<string, CacheEntry>();
+const CACHE_TTL = 30000; // 30 seconds
+
+// Rate limiting: track last request time and add delay if needed
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 150; // 150ms between requests (max ~6-7 req/sec to stay under 60/min)
+
+async function rateLimit() {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
+}
+
 /**
  * Read data from a sheet tab
+ * Uses caching to reduce API calls
  */
-export async function readSheet(sheetName: string): Promise<any[][]> {
+export async function readSheet(sheetName: string, useCache: boolean = true): Promise<any[][]> {
+  // Check cache first
+  if (useCache) {
+    const cacheKey = sheetName;
+    const cached = readCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      return cached.data;
+    }
+  }
+  
+  await rateLimit();
   const sheets = await getSheetsClient();
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
     range: `${sheetName}!A:Z`,
   });
-  return response.data.values || [];
+  const data = response.data.values || [];
+  
+  // Cache the result
+  if (useCache) {
+    readCache.set(sheetName, {
+      data,
+      timestamp: Date.now(),
+    });
+  }
+  
+  return data;
 }
 
 /**
  * Append a row to a sheet tab
  */
 export async function appendRow(sheetName: string, row: any[]): Promise<void> {
+  await rateLimit();
+  // Clear cache for this sheet since we're writing to it
+  readCache.delete(sheetName);
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.append({
     spreadsheetId: SPREADSHEET_ID,
@@ -101,6 +149,9 @@ export async function updateCell(
   colIndex: number,
   value: any
 ): Promise<void> {
+  await rateLimit();
+  // Clear cache for this sheet since we're writing to it
+  readCache.delete(sheetName);
   const sheets = await getSheetsClient();
   const colLetter = String.fromCharCode(65 + colIndex); // A, B, C, etc.
   await sheets.spreadsheets.values.update({
@@ -121,6 +172,9 @@ export async function updateRange(
   range: string,
   values: any[][]
 ): Promise<void> {
+  await rateLimit();
+  // Clear cache for this sheet since we're writing to it
+  readCache.delete(sheetName);
   const sheets = await getSheetsClient();
   await sheets.spreadsheets.values.update({
     spreadsheetId: SPREADSHEET_ID,
@@ -152,25 +206,22 @@ export async function findRows(
   return matchingRows;
 }
 
-// Cache to track which sheets we've checked (reduces API calls)
-const sheetExistenceCache = new Set<string>();
-
 /**
  * Ensure a sheet exists, create if not
  * Uses caching to avoid repeated API calls
  */
 export async function ensureSheet(sheetName: string, headers: string[]): Promise<void> {
-  // If we've already checked this sheet, skip (unless we need to verify headers)
-  if (sheetExistenceCache.has(sheetName) && headers.length === 0) {
+  // If we've already checked this sheet, skip entirely
+  if (sheetExistenceCache.has(sheetName)) {
     return;
   }
   
+  await rateLimit();
   const sheets = await getSheetsClient();
   
   try {
     // Try to read the sheet (just first row to check existence)
-    const sheetsClient = await getSheetsClient();
-    await sheetsClient.spreadsheets.values.get({
+    await sheets.spreadsheets.values.get({
       spreadsheetId: SPREADSHEET_ID,
       range: `${sheetName}!A1:Z1`,
     });
@@ -188,6 +239,7 @@ export async function ensureSheet(sheetName: string, headers: string[]): Promise
   } catch (error: any) {
     // Sheet doesn't exist, create it
     if (error.code === 400 || error.message?.includes('Unable to parse range') || error.message?.includes('not found')) {
+      await rateLimit();
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: {
@@ -220,6 +272,7 @@ export async function ensureSheet(sheetName: string, headers: string[]): Promise
  * Get sheet ID by name
  */
 async function getSheetId(sheetName: string): Promise<number> {
+  await rateLimit();
   const sheets = await getSheetsClient();
   const response = await sheets.spreadsheets.get({
     spreadsheetId: SPREADSHEET_ID,
@@ -235,6 +288,9 @@ async function getSheetId(sheetName: string): Promise<number> {
  * Delete a row by index (1-based, where 1 is header)
  */
 export async function deleteRow(sheetName: string, rowIndex: number): Promise<void> {
+  await rateLimit();
+  // Clear cache for this sheet since we're modifying it
+  readCache.delete(sheetName);
   const sheets = await getSheetsClient();
   const sheetId = await getSheetId(sheetName);
   await sheets.spreadsheets.batchUpdate({

@@ -95,12 +95,12 @@ export async function POST(request: NextRequest) {
 
     // Only initialize sheets for actions that need it (not for every request)
     // This reduces API calls and prevents quota exhaustion
+    // Skip initialization entirely for most actions - sheets should already exist
     if (action === 'login' || action === 'getStudents' || action === 'addStudent') {
       await initializeSheets();
-    } else {
-      // For other actions, just ensure the specific sheets exist without full initialization
-      await ensureSheet(SHEET_NAMES.USERS, ['id', 'username', 'password', 'role', 'displayName', 'status']);
     }
+    // For other actions, don't call ensureSheet - assume sheets exist
+    // This prevents unnecessary API calls that cause quota exhaustion
 
     let result: any = { error: 'Unknown action' };
 
@@ -205,21 +205,20 @@ export async function POST(request: NextRequest) {
 }
 
 // Initialize all sheets (only call when needed, not on every request)
+// Use sequential calls instead of parallel to respect rate limits
 async function initializeSheets() {
-  // Use Promise.all to initialize sheets in parallel (faster, fewer sequential API calls)
-  await Promise.all([
-    ensureSheet(SHEET_NAMES.USERS, ['id', 'username', 'password', 'role', 'displayName', 'status']),
-    ensureSheet(SHEET_NAMES.SKILLS, ['id', 'nameHe']),
-    ensureSheet(SHEET_NAMES.SKILL_METRICS, ['id', 'skillId', 'nameHe', 'descriptionHe']),
-    ensureSheet(SHEET_NAMES.STUDENT_SKILL_LEVELS, ['studentId', 'skillId', 'level', 'progressPercent']),
-    ensureSheet(SHEET_NAMES.SELF_ASSESSMENTS, ['studentId', 'skillId', 'date', 'metricId', 'value']),
-    ensureSheet(SHEET_NAMES.PERSONAL_PLAN_TEMPLATES, ['id', 'nameHe']),
-    ensureSheet(SHEET_NAMES.STUDENT_DAILY_TASKS, ['studentId', 'taskId', 'date', 'completed', 'timeLabel', 'priority']),
-    ensureSheet(SHEET_NAMES.ACTIVITIES, ['id', 'date', 'titleHe', 'descriptionHe', 'timeStart', 'timeEnd']),
-    ensureSheet(SHEET_NAMES.ACTIVITY_COMPLETIONS, ['activityId', 'studentId', 'completed']),
-    ensureSheet(SHEET_NAMES.ACTIVITY_METRICS, ['activityId', 'metricId', 'nameHe', 'descriptionHe']),
-    ensureSheet(SHEET_NAMES.ACTIVITY_ASSESSMENTS, ['activityId', 'studentId', 'metricId', 'value']),
-  ]);
+  // Initialize sheets sequentially to avoid hitting rate limits
+  await ensureSheet(SHEET_NAMES.USERS, ['id', 'username', 'password', 'role', 'displayName', 'status']);
+  await ensureSheet(SHEET_NAMES.SKILLS, ['id', 'nameHe']);
+  await ensureSheet(SHEET_NAMES.SKILL_METRICS, ['id', 'skillId', 'nameHe', 'descriptionHe']);
+  await ensureSheet(SHEET_NAMES.STUDENT_SKILL_LEVELS, ['studentId', 'skillId', 'level', 'progressPercent']);
+  await ensureSheet(SHEET_NAMES.SELF_ASSESSMENTS, ['studentId', 'skillId', 'date', 'metricId', 'value']);
+  await ensureSheet(SHEET_NAMES.PERSONAL_PLAN_TEMPLATES, ['id', 'nameHe']);
+  await ensureSheet(SHEET_NAMES.STUDENT_DAILY_TASKS, ['studentId', 'taskId', 'date', 'completed', 'timeLabel', 'priority']);
+  await ensureSheet(SHEET_NAMES.ACTIVITIES, ['id', 'date', 'titleHe', 'descriptionHe', 'timeStart', 'timeEnd']);
+  await ensureSheet(SHEET_NAMES.ACTIVITY_COMPLETIONS, ['activityId', 'studentId', 'completed']);
+  await ensureSheet(SHEET_NAMES.ACTIVITY_METRICS, ['activityId', 'metricId', 'nameHe', 'descriptionHe']);
+  await ensureSheet(SHEET_NAMES.ACTIVITY_ASSESSMENTS, ['activityId', 'studentId', 'metricId', 'value']);
   
   // Ensure admin user exists
   await ensureAdminUser();
