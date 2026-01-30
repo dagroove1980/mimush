@@ -20,19 +20,41 @@ export async function POST(request: NextRequest) {
     console.log("[API] Calling:", url.substring(0, 100) + "...");
     console.log("[API] Action:", action);
     
+    // Google Apps Script Web Apps sometimes block server-side requests
+    // Try with minimal headers first, then fallback
     const res = await fetch(url, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
-        "User-Agent": "MerkazMiyum/1.0"
       },
       body: JSON.stringify({ action, ...rest }),
-      redirect: "follow", // Follow redirects
+      redirect: "follow",
+      // Don't send cookies or credentials
+      credentials: "omit",
     });
     
     const text = await res.text();
     console.log("[API] Response status:", res.status);
     console.log("[API] Response text length:", text.length);
+    
+    // Check if we got HTML instead of JSON (sign-in page or error page)
+    const isHtml = text.trim().toLowerCase().startsWith("<!doctype") || 
+                   text.includes("<html") || 
+                   text.includes("accounts.google.com") ||
+                   text.includes("Error</title>");
+    
+    if (isHtml) {
+      console.error("[API] Got HTML response instead of JSON - Web App may be blocking server requests");
+      console.error("[API] HTML preview:", text.substring(0, 500));
+      return NextResponse.json(
+        { 
+          error: "Web App returned HTML instead of JSON. The Web App may need to be redeployed with 'Anyone' access, or it's blocking server-side requests.",
+          details: "Direct browser access works, but server-side requests are blocked. Try redeploying the Web App.",
+          htmlPreview: text.substring(0, 300)
+        },
+        { status: 502 }
+      );
+    }
     
     if (!res.ok) {
       console.error("[API] Error response:", text.substring(0, 500));
