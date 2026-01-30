@@ -2,15 +2,22 @@ import { NextRequest, NextResponse } from "next/server";
 import { readSheet } from "@/lib/google-sheets-client";
 
 export async function GET(request: NextRequest) {
+  // Clean values for display
+  const cleanSpreadsheetId = (process.env.GOOGLE_SHEETS_SPREADSHEET_ID || '').replace(/\nN\n$/, '').trim();
+  const cleanEmail = (process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '').replace(/\nN\n$/, '').trim();
+  const cleanKey = (process.env.GOOGLE_PRIVATE_KEY || '').replace(/\nN\n$/, '').trim();
+  
   const info: any = {
-    hasSpreadsheetId: !!process.env.GOOGLE_SHEETS_SPREADSHEET_ID,
-    hasServiceAccountEmail: !!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-    hasPrivateKey: !!process.env.GOOGLE_PRIVATE_KEY,
-    spreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID || "NOT SET",
-    serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "NOT SET",
-    privateKeyLength: process.env.GOOGLE_PRIVATE_KEY?.length || 0,
-    privateKeyPreview: process.env.GOOGLE_PRIVATE_KEY?.substring(0, 50) || "NOT SET",
+    hasSpreadsheetId: !!cleanSpreadsheetId,
+    hasServiceAccountEmail: !!cleanEmail,
+    hasPrivateKey: !!cleanKey,
+    spreadsheetId: cleanSpreadsheetId || "NOT SET",
+    serviceAccountEmail: cleanEmail || "NOT SET",
+    privateKeyLength: cleanKey.length || 0,
+    privateKeyPreview: cleanKey.substring(0, 50) || "NOT SET",
     nodeEnv: process.env.NODE_ENV,
+    rawSpreadsheetId: process.env.GOOGLE_SHEETS_SPREADSHEET_ID?.substring(0, 100),
+    rawEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL?.substring(0, 100),
   };
 
   // Test connection

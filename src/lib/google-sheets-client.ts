@@ -5,15 +5,27 @@
 
 import { google } from 'googleapis';
 
-const SPREADSHEET_ID = process.env.GOOGLE_SHEETS_SPREADSHEET_ID || '';
-const SERVICE_ACCOUNT_EMAIL = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || '';
+// Clean environment variables - remove any trailing \nN\n from CLI input
+function cleanEnvVar(value: string | undefined): string {
+  if (!value) return '';
+  // Remove trailing \nN\n that might have been added by CLI
+  return value.replace(/\nN\n$/, '').trim();
+}
+
+const SPREADSHEET_ID = cleanEnvVar(process.env.GOOGLE_SHEETS_SPREADSHEET_ID);
+const SERVICE_ACCOUNT_EMAIL = cleanEnvVar(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL);
+
 // Handle private key - it might come with literal \n or actual newlines
-let PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY || '';
+let PRIVATE_KEY = cleanEnvVar(process.env.GOOGLE_PRIVATE_KEY);
 if (PRIVATE_KEY) {
-  // Replace literal \n with actual newlines
-  PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, '\n');
-  // Remove quotes if present
+  // Remove surrounding quotes if present
   PRIVATE_KEY = PRIVATE_KEY.replace(/^["']|["']$/g, '');
+  // Replace literal \n with actual newlines (handle both \\n and \n)
+  PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, '\n');
+  // Also handle if it's already got newlines but escaped
+  if (!PRIVATE_KEY.includes('\n') && PRIVATE_KEY.includes('\\n')) {
+    PRIVATE_KEY = PRIVATE_KEY.replace(/\\n/g, '\n');
+  }
 }
 
 let authClient: any = null;
