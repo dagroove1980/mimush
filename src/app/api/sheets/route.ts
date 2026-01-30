@@ -61,12 +61,37 @@ const DEFAULT_SKILL_METRICS = [
 
 export async function POST(request: NextRequest) {
   try {
+    // Check environment variables
+    if (!process.env.GOOGLE_SHEETS_SPREADSHEET_ID) {
+      console.error("[API] GOOGLE_SHEETS_SPREADSHEET_ID not set");
+      return NextResponse.json(
+        { error: "GOOGLE_SHEETS_SPREADSHEET_ID not configured" },
+        { status: 500 }
+      );
+    }
+    if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
+      console.error("[API] GOOGLE_SERVICE_ACCOUNT_EMAIL not set");
+      return NextResponse.json(
+        { error: "GOOGLE_SERVICE_ACCOUNT_EMAIL not configured" },
+        { status: 500 }
+      );
+    }
+    if (!process.env.GOOGLE_PRIVATE_KEY) {
+      console.error("[API] GOOGLE_PRIVATE_KEY not set");
+      return NextResponse.json(
+        { error: "GOOGLE_PRIVATE_KEY not configured" },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
     const { action, ...params } = body;
 
     if (!action) {
       return NextResponse.json({ error: "Missing action" }, { status: 400 });
     }
+
+    console.log("[API] Action:", action);
 
     // Initialize sheets
     await initializeSheets();
@@ -148,9 +173,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Request failed";
-    console.error("[API] Error:", message, err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[API] Error:", message);
+    console.error("[API] Stack:", stack);
+    console.error("[API] Full error:", err);
+    
+    // Provide more helpful error messages
+    let errorMessage = message;
+    if (message.includes('credentials')) {
+      errorMessage = "Google Sheets API credentials not configured. Check environment variables.";
+    } else if (message.includes('permission') || message.includes('access')) {
+      errorMessage = "Permission denied. Make sure the Google Sheet is shared with the service account email.";
+    } else if (message.includes('not found') || message.includes('404')) {
+      errorMessage = "Google Sheet not found. Check GOOGLE_SHEETS_SPREADSHEET_ID.";
+    }
+    
     return NextResponse.json(
-      { error: message },
+      { 
+        error: errorMessage,
+        details: process.env.NODE_ENV === "development" ? stack : undefined
+      },
       { status: 500 }
     );
   }
