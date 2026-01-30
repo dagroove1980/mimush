@@ -17,38 +17,52 @@ async function fetchApi<T>(
 ): Promise<T> {
   const SHEETS_URL = getSheetsUrl();
   if (!SHEETS_URL) {
-    throw new Error("NEXT_PUBLIC_SHEETS_APP_URL is not set. Please check your environment variables.");
+    console.error("[Sheets API] NEXT_PUBLIC_SHEETS_APP_URL is not set");
+    throw new Error("NEXT_PUBLIC_SHEETS_APP_URL is not set. Please check your environment variables in Vercel.");
   }
   
   // Call Google Apps Script directly from client-side (browser)
   // This works because browser requests aren't blocked like server-side requests
   const url = `${SHEETS_URL}?action=${encodeURIComponent(action)}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ action, ...body }),
-  });
   
-  const text = await res.text();
-  
-  // Check if we got HTML instead of JSON (shouldn't happen from browser, but just in case)
-  if (text.trim().toLowerCase().startsWith("<!doctype") || text.includes("<html")) {
-    throw new Error("Web App returned HTML instead of JSON. Please check Web App deployment settings.");
-  }
-  
-  let data: unknown;
   try {
-    data = JSON.parse(text);
-  } catch {
-    throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, ...body }),
+    });
+    
+    const text = await res.text();
+    
+    // Check if we got HTML instead of JSON (shouldn't happen from browser, but just in case)
+    if (text.trim().toLowerCase().startsWith("<!doctype") || text.includes("<html")) {
+      console.error("[Sheets API] Got HTML response:", text.substring(0, 200));
+      throw new Error("Web App returned HTML instead of JSON. Please check Web App deployment settings - 'Who has access' should be 'Anyone'.");
+    }
+    
+    let data: unknown;
+    try {
+      data = JSON.parse(text);
+    } catch (parseErr) {
+      console.error("[Sheets API] JSON parse error:", parseErr);
+      console.error("[Sheets API] Response text:", text.substring(0, 200));
+      throw new Error(`Invalid JSON response from API: ${text.substring(0, 100)}`);
+    }
+    
+    const errorData = data as { error?: string };
+    if (!res.ok || errorData.error) {
+      throw new Error(errorData.error || res.statusText || "API request failed");
+    }
+    
+    return data as T;
+  } catch (err) {
+    // Re-throw with more context if it's a network error
+    if (err instanceof TypeError && err.message.includes("fetch")) {
+      console.error("[Sheets API] Network error:", err);
+      throw new Error(`Network error: Cannot connect to Google Apps Script. Check your internet connection and verify the Web App URL is correct.`);
+    }
+    throw err;
   }
-  
-  const errorData = data as { error?: string };
-  if (!res.ok || errorData.error) {
-    throw new Error(errorData.error || res.statusText);
-  }
-  
-  return data as T;
 }
 
 // Auth
