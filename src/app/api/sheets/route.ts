@@ -21,16 +21,18 @@ export async function POST(request: NextRequest) {
     console.log("[API] Action:", action);
     
     // Google Apps Script Web Apps sometimes block server-side requests
-    // Try with minimal headers first, then fallback
+    // Make the request look more like a browser request
     const res = await fetch(url, {
       method: "POST",
       headers: { 
         "Content-Type": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Origin": "https://mimush.vercel.app",
+        "Referer": "https://mimush.vercel.app/",
       },
       body: JSON.stringify({ action, ...rest }),
       redirect: "follow",
-      // Don't send cookies or credentials
-      credentials: "omit",
     });
     
     const text = await res.text();

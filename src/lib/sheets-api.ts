@@ -1,24 +1,48 @@
 /**
  * Client for Google Apps Script Web App backend.
- * Calls /api/sheets (Next.js proxy) to avoid CORS; set NEXT_PUBLIC_SHEETS_APP_URL in .env.local.
+ * Calls Google Apps Script directly from client-side (browser) to avoid server-side blocking.
+ * Set NEXT_PUBLIC_SHEETS_APP_URL in .env.local and Vercel.
  */
+
+const SHEETS_URL = process.env.NEXT_PUBLIC_SHEETS_APP_URL || "";
 
 async function fetchApi<T>(
   action: string,
   _method: "GET" | "POST" = "POST",
   body?: Record<string, unknown>
 ): Promise<T> {
-  const url = "/api/sheets";
+  if (!SHEETS_URL) {
+    throw new Error("NEXT_PUBLIC_SHEETS_APP_URL is not set");
+  }
+  
+  // Call Google Apps Script directly from client-side (browser)
+  // This works because browser requests aren't blocked like server-side requests
+  const url = `${SHEETS_URL}?action=${encodeURIComponent(action)}`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...body }),
   });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = (data as { error?: string })?.error || res.statusText;
-    throw new Error(err);
+  
+  const text = await res.text();
+  
+  // Check if we got HTML instead of JSON (shouldn't happen from browser, but just in case)
+  if (text.trim().toLowerCase().startsWith("<!doctype") || text.includes("<html")) {
+    throw new Error("Web App returned HTML instead of JSON. Please check Web App deployment settings.");
   }
+  
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error(`Invalid JSON response: ${text.substring(0, 100)}`);
+  }
+  
+  const errorData = data as { error?: string };
+  if (!res.ok || errorData.error) {
+    throw new Error(errorData.error || res.statusText);
+  }
+  
   return data as T;
 }
 
