@@ -22,8 +22,12 @@ export async function POST(request: NextRequest) {
     
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "User-Agent": "MerkazMiyum/1.0"
+      },
       body: JSON.stringify({ action, ...rest }),
+      redirect: "follow", // Follow redirects
     });
     
     const text = await res.text();
