@@ -15,9 +15,21 @@ import {
 } from "@/lib/sheets-api";
 import type { Skill, PersonalPlanTask, Activity, ActivityMetric } from "@/lib/types";
 import { formatDateKey } from "@/lib/date-utils";
+import Image from "next/image";
 
 function formatDateHe(d: Date) {
   return d.toLocaleDateString("he-IL", { day: "numeric", month: "long" });
+}
+
+function getSkillImage(skillId: string): string {
+  const imageMap: Record<string, string> = {
+    computer: "/skill-computer.png",
+    cooking: "/skill-cooking.png",
+    social: "/skill-social.png",
+    drawing: "/skill-painting.png",
+    painting: "/skill-painting.png",
+  };
+  return imageMap[skillId] || "";
 }
 
 export default function StudentDashboardPage() {
@@ -187,9 +199,20 @@ export default function StudentDashboardPage() {
                 className="group flex cursor-pointer flex-col rounded-xl border border-border bg-surface p-5 shadow-sm transition-colors hover:border-primary/50 hover:bg-surface-hover"
               >
                 <div className="mb-4 flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg bg-progress-track">
-                  <span className="material-symbols-outlined text-5xl text-primary">
-                    {skill.id === "cooking" ? "restaurant" : skill.id === "computer" ? "computer" : skill.id === "drawing" ? "palette" : skill.id === "social" ? "forum" : skill.id === "cleaning" ? "cleaning_services" : skill.id === "fitness" ? "fitness_center" : "star"}
-                  </span>
+                  {getSkillImage(skill.id) ? (
+                    <Image
+                      src={getSkillImage(skill.id)}
+                      alt={skill.nameHe}
+                      width={400}
+                      height={225}
+                      className="h-full w-full object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="material-symbols-outlined text-5xl text-primary">
+                      {skill.id === "cooking" ? "restaurant" : skill.id === "computer" ? "computer" : skill.id === "drawing" ? "palette" : skill.id === "social" ? "forum" : skill.id === "cleaning" ? "cleaning_services" : skill.id === "fitness" ? "fitness_center" : "star"}
+                    </span>
+                  )}
                 </div>
                 <div className="mb-2 flex items-end justify-between">
                   <h4 className="text-lg font-bold text-text">{skill.nameHe}</h4>

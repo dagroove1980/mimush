@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useAuth } from "@/lib/auth-context";
 import { getStudentSkills } from "@/lib/sheets-api";
 import type { Skill } from "@/lib/types";
@@ -15,6 +16,17 @@ const skillIcons: Record<string, string> = {
   fitness: "fitness_center",
   default: "star",
 };
+
+function getSkillImage(skillId: string): string {
+  const imageMap: Record<string, string> = {
+    computer: "/skill-computer.png",
+    cooking: "/skill-cooking.png",
+    social: "/skill-social.png",
+    drawing: "/skill-painting.png",
+    painting: "/skill-painting.png",
+  };
+  return imageMap[skillId] || "";
+}
 
 export default function SkillsListPage() {
   const { user } = useAuth();
@@ -47,10 +59,21 @@ export default function SkillsListPage() {
             href={`/dashboard/skills/${skill.id}/assess`}
             className="flex items-center gap-4 rounded-xl border border-border bg-surface p-5 transition-colors hover:border-primary/50 hover:bg-surface-hover"
           >
-            <div className="flex size-14 items-center justify-center rounded-xl bg-primary-muted text-primary">
-              <span className="material-symbols-outlined text-3xl">
-                {skillIcons[skill.id] || skillIcons.default}
-              </span>
+            <div className="flex size-14 items-center justify-center overflow-hidden rounded-xl bg-primary-muted">
+              {getSkillImage(skill.id) ? (
+                <Image
+                  src={getSkillImage(skill.id)}
+                  alt={skill.nameHe}
+                  width={56}
+                  height={56}
+                  className="h-full w-full object-cover"
+                  unoptimized
+                />
+              ) : (
+                <span className="material-symbols-outlined text-3xl text-primary">
+                  {skillIcons[skill.id] || skillIcons.default}
+                </span>
+              )}
             </div>
             <div>
               <h3 className="text-lg font-bold text-text">{skill.nameHe}</h3>
