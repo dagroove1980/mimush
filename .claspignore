@@ -1,0 +1,21 @@
+# Ignore files that shouldn't be pushed to Apps Script
+node_modules/
+.git/
+.env*
+*.md
+!README.md
+src/
+public/
+.next/
+out/
+*.json
+!appsscript.json
+*.ts
+*.tsx
+*.jsx
+*.css
+*.config.*
+.eslintrc*
+.gitignore
+.claspignore
+.clasp.json

@@ -685,3 +685,21 @@ function apiSetActivityCompleted(studentId, activityId, completed) {
   sheet.appendRow([activityId, studentId, completed]);
   return { success: true };
 }
+
+// Test function to verify spreadsheet connection
+function testConnection() {
+  try {
+    const ss = getSpreadsheet();
+    const sheet = ss.getSheetByName('Users');
+    if (!sheet) {
+      Logger.log('Users sheet does not exist - will be created');
+      return { success: true, message: 'Spreadsheet accessible, Users sheet will be created on first use' };
+    }
+    const data = sheet.getDataRange().getValues();
+    Logger.log('Success! Found ' + data.length + ' rows in Users sheet');
+    return { success: true, message: 'Spreadsheet accessible', rows: data.length };
+  } catch (err) {
+    Logger.log('Error: ' + err.toString());
+    return { success: false, error: err.toString() };
+  }
+}

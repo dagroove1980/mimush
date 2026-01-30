@@ -4,6 +4,7 @@ const SHEETS_URL = process.env.NEXT_PUBLIC_SHEETS_APP_URL || "";
 
 export async function POST(request: NextRequest) {
   if (!SHEETS_URL) {
+    console.error("[API] NEXT_PUBLIC_SHEETS_APP_URL is not set");
     return NextResponse.json(
       { error: "NEXT_PUBLIC_SHEETS_APP_URL is not set" },
       { status: 500 }
@@ -16,29 +17,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Missing action" }, { status: 400 });
     }
     const url = `${SHEETS_URL}?action=${encodeURIComponent(action)}`;
+    console.log("[API] Calling:", url.substring(0, 100) + "...");
+    console.log("[API] Action:", action);
+    
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, ...rest }),
     });
+    
     const text = await res.text();
+    console.log("[API] Response status:", res.status);
+    console.log("[API] Response text length:", text.length);
+    
     if (!res.ok) {
+      console.error("[API] Error response:", text.substring(0, 500));
       return NextResponse.json(
-        { error: text || res.statusText },
-        { status: res.status }
+        { error: text || res.statusText, status: res.status },
+        { status: res.status >= 400 && res.status < 600 ? res.status : 500 }
       );
     }
     let data: unknown;
     try {
       data = JSON.parse(text);
-    } catch {
-      return NextResponse.json({ error: "Invalid JSON from API" }, { status: 502 });
+    } catch (parseErr) {
+      console.error("[API] JSON parse error:", parseErr);
+      console.error("[API] Response text:", text.substring(0, 500));
+      return NextResponse.json(
+        { error: "Invalid JSON from API", details: text.substring(0, 200) },
+        { status: 502 }
+      );
     }
     return NextResponse.json(data);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Request failed";
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[API] Exception:", message);
+    console.error("[API] Stack:", stack);
     return NextResponse.json(
-      { error: message },
+      { error: message, details: process.env.NODE_ENV === "development" ? stack : undefined },
       { status: 500 }
     );
   }
