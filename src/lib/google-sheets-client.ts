@@ -152,23 +152,42 @@ export async function findRows(
   return matchingRows;
 }
 
+// Cache to track which sheets we've checked (reduces API calls)
+const sheetExistenceCache = new Set<string>();
+
 /**
  * Ensure a sheet exists, create if not
+ * Uses caching to avoid repeated API calls
  */
 export async function ensureSheet(sheetName: string, headers: string[]): Promise<void> {
+  // If we've already checked this sheet, skip (unless we need to verify headers)
+  if (sheetExistenceCache.has(sheetName) && headers.length === 0) {
+    return;
+  }
+  
   const sheets = await getSheetsClient();
   
   try {
-    // Try to read the sheet
-    await readSheet(sheetName);
-    // Sheet exists, check if it has headers
-    const data = await readSheet(sheetName);
-    if (data.length === 0 && headers.length > 0) {
-      await updateRange(sheetName, 'A1', [headers]);
+    // Try to read the sheet (just first row to check existence)
+    const sheetsClient = await getSheetsClient();
+    await sheetsClient.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `${sheetName}!A1:Z1`,
+    });
+    
+    // Sheet exists - mark in cache
+    sheetExistenceCache.add(sheetName);
+    
+    // Check if headers exist (only if headers provided)
+    if (headers.length > 0) {
+      const data = await readSheet(sheetName);
+      if (data.length === 0) {
+        await updateRange(sheetName, 'A1', [headers]);
+      }
     }
   } catch (error: any) {
     // Sheet doesn't exist, create it
-    if (error.code === 400 || error.message?.includes('Unable to parse range')) {
+    if (error.code === 400 || error.message?.includes('Unable to parse range') || error.message?.includes('not found')) {
       await sheets.spreadsheets.batchUpdate({
         spreadsheetId: SPREADSHEET_ID,
         requestBody: {
@@ -188,6 +207,9 @@ export async function ensureSheet(sheetName: string, headers: string[]): Promise
       if (headers.length > 0) {
         await updateRange(sheetName, 'A1', [headers]);
       }
+      
+      // Mark in cache
+      sheetExistenceCache.add(sheetName);
     } else {
       throw error;
     }
